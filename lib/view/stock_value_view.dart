@@ -9,6 +9,7 @@ class StockValueView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer(builder: (context, ref, child) {
       List<dynamic> stockValues = ref.watch(stockValuesProvider.notifier).state;
+      print("stock value list $stockValues");
       return Scaffold(
         appBar: AppBar(
           title: const Text(""),

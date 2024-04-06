@@ -7,21 +7,15 @@ import 'package:stock_scan_parser_example/view/stock_list_view.dart';
 import '../model/stock_model.dart';
 import '../utils/strings.dart';
 import '../utils/util_functions.dart';
+import '../viewmodel/stock_viewmodel.dart';
 
 final stockVariableProvider = StateProvider<Map<String, dynamic>>((ref) => {});
 
 final stockValuesProvider = StateProvider<List<dynamic>>((ref) => []);
 
 class StockDetailView extends StatelessWidget {
-  StockDetailView({super.key});
+  const StockDetailView({super.key});
 
-  Map<String, String> defValueListForType = {};
-
-  Map<String, dynamic> variableValueTemp = {};
-
-  List<dynamic> matchedTextsForValue = [];
-
-  List<String> defValueList = [];
 
   @override
   Widget build(BuildContext context) {
@@ -78,10 +72,10 @@ class StockDetailView extends StatelessWidget {
   ) {
     List<Widget> criteriaList = [];
     String orgText = "";
-    defValueList = [];
-    defValueListForType = {};
-    variableValueTemp = {};
-    matchedTextsForValue = [];
+    List<String> defValueToShow = [];
+    Map<String, String> defValueType = {};
+    Map<String, dynamic> variableValueTemp = {};
+    List<dynamic> matchedTextsForValue = [];
     for (int i = 0; i < criteria.length; i++) {
       orgText = criteria[i].text;
       if (criteria[i].type == "variable") {
@@ -91,13 +85,16 @@ class StockDetailView extends StatelessWidget {
             variableValue /*  {type: '', values: '', study_type: '', etc} */) {
           print('Key: $variableKey, Value: $variableValue');
           if (criteria[i].text.contains(variableKey)) {
-            var defValue = decideDefaultValueForKey(variableValue);
-            orgText = orgText.replaceAll(variableKey, defValue);
+            defValueToShow = StockViewModel().getDefaultValueToShow(variableValue);
+            defValueType = StockViewModel().getDefaultValueType(variableValue);
+            variableValueTemp = variableValue;
+            matchedTextsForValue = StockViewModel().getMatchedTextForValue(variableValue);
+            orgText = orgText.replaceAll(variableKey, defValueToShow.toString());
           }
         });
       }
-      print("orgText: $orgText defValue: $defValueList");
-      criteriaList.add(drawRichText(orgText, defValueList, defValueListForType,
+      //print("orgText: $orgText defValue: $defValueList");
+      criteriaList.add(drawRichText(orgText, defValueToShow, defValueType,
           ref, variableValueTemp, context, matchedTextsForValue));
       criteriaList.add(
         i != criteria.length - 1 ? const Text("and") : Container(),
@@ -111,37 +108,19 @@ class StockDetailView extends StatelessWidget {
     return criteriaList;
   }
 
-  // value = {type: '', values: '', study_type: '', etc}
-  decideDefaultValueForKey(value) {
-    String defaultValue = "";
-    Map<String, dynamic> variableValue = value;
-    if (variableValue['type'] == "value") {
-      defaultValue = variableValue['values']![0].toString();
-      defValueList.add(defaultValue);
-      defValueListForType[defaultValue] = variableValue['type']!;
-      variableValueTemp[defaultValue] = variableValue;
-      matchedTextsForValue.addAll(variableValue['values']);
-    } else if (variableValue['type'] == "indicator") {
-      defaultValue = variableValue["default_value"].toString();
-      defValueList.add(defaultValue);
-      defValueListForType[defaultValue] = variableValue['type']!;
-      variableValueTemp[defaultValue] = variableValue;
-      matchedTextsForValue = [];
-    }
-    return defaultValue;
-  }
+  
 
   drawRichText(
       orgText,
       List<String> defValueList,
-      Map<String, String> defValueListForType,
+      Map<String, String> defValueType,
       ref,
       Map<String, dynamic> variableValue,
       context,
       List<dynamic> matchedTextsForValue) {
     return RichText(
       text: TextSpan(
-        children: _buildTextSpans(orgText, defValueList, defValueListForType,
+        children: _buildTextSpans(orgText, defValueList, defValueType,
             ref, variableValue, context, matchedTextsForValue),
       ),
     );
@@ -162,8 +141,9 @@ class StockDetailView extends StatelessWidget {
 
     // Loop through the parts and add TextSpan widgets
     for (int i = 0; i < parts.length; i++) {
-      //print('Key: ${mapEntry},');
       String part = parts[i];
+      print('Parted Text: $part,');
+      print('Matched Text: $matchedText,');
       bool isMatched = matchedText.contains(part);
       if (isMatched) {
         // Add underlined text
@@ -176,18 +156,19 @@ class StockDetailView extends StatelessWidget {
             ),
             recognizer: TapGestureRecognizer()
               ..onTap = () {
-                String clickedType = findType(part, matchedTextForType);
+                String clickedType = StockViewModel().findType(part, matchedTextForType);
                 print('Link tapped $clickedType');
 
                 if (clickedType.contains("indicator")) {
-                  ref.watch(stockVariableProvider.notifier).state =
-                      findVariableValue(part, variableValue);
+                  print("My V Type $variableValue");
+                  ref.watch(stockVariableProvider.notifier).state = variableValue;
+                      //StockViewModel().findVariableValue(part, variableValue);
                   GoRouter.of(context).go(variableRouterPath);
                 } else {
                   print("My V Type $variableValue");
                   print("My Values $matchedTextsForValue");
-                  ref.watch(stockValuesProvider.notifier).state =
-                      findValues(part, matchedTextsForValue, variableValue);
+                  ref.watch(stockValuesProvider.notifier).state = matchedTextsForValue;
+                      //StockViewModel().findValues(part, matchedTextsForValue, variableValue);
                   GoRouter.of(context).go(valueRouterPath);
                 }
               },
@@ -205,37 +186,5 @@ class StockDetailView extends StatelessWidget {
     }
 
     return textSpans;
-  }
-
-  findType(String part, Map<String, String> matchedTextsForType) {
-    String clickedType = "";
-    for (var key in matchedTextsForType.entries) {
-      if (part.contains(key.key)) {
-        clickedType = key.value;
-      }
-    }
-    return clickedType;
-  }
-
-  Map<String, dynamic> findVariableValue(
-      String part, Map<String, dynamic> matchedTextsForVariableValue) {
-    Map<String, dynamic> clickedVariableValue = {};
-    for (var key in matchedTextsForVariableValue.entries) {
-      if (part.contains(key.key)) {
-        clickedVariableValue = key.value;
-      }
-    }
-    return clickedVariableValue;
-  }
-
-  List<dynamic> findValues(String part, List<dynamic> matchedTextsValue,
-      Map<String, dynamic> matchedTextsForVariableValue) {
-    List<dynamic> clickedVariableValue = [];
-    for (var key in matchedTextsForVariableValue.entries) {
-      if (part.contains(key.key.toString())) {
-        clickedVariableValue.addAll(key.value['values']);
-      }
-    }
-    return clickedVariableValue;
   }
 }
